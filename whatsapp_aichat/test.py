@@ -6,6 +6,22 @@ client = OpenAI(
     base_url="https://kwai-pwa-hzs.test.gifshow.com/v1/",
     api_key="002e9aeb0e0fec02d389ab69238783856914be23"
 )
+
+
+def call_llm(chatMsg):
+    return client.chat.completions.create(
+        model="Llama-3.3-70B-Instruct-ablated",
+        messages=chatMsg,
+        top_p=None,
+        temperature=None,
+        max_tokens=1500,
+        stream=False,
+        seed=None,
+        frequency_penalty=None,
+        presence_penalty=None
+    ).choices[0].message.content
+
+
 chatMsg = []
 chatMsg.append({"role": "system",
                 "content":
@@ -54,48 +70,58 @@ chatMsg.append({"role": "system",
        responses all your content in Simplified Chinese
                     """
                 })
+
 if __name__ == '__main__':
+    # step1: 打开WhatsApp
+    d = u2.connect('ff377427')
+    print(d.info)
+    d.press('home')
+    d.app_stop('com.whatsapp')
+    d.app_start('com.whatsapp', activity='com.whatsapp.HomeActivity')
+    # step2: 打开一个具体的聊天窗口
+    d(className='android.widget.ImageButton', resourceId="com.whatsapp:id/menuitem_search").click()
+    d(className='android.widget.EditText', resourceId="com.whatsapp:id/search_input").clear_text()
+    d(className='android.widget.EditText', resourceId="com.whatsapp:id/search_input").set_text('jiyao')
+    d.press('enter')
+    d(className='android.widget.RelativeLayout', resourceId="com.whatsapp:id/contact_row_container").click()
+    sleep(0.1)
+    last_received_msg = ''
+    # step3: 读取聊天记录
+    msg_list = d(className='android.widget.ListView', resourceId="android:id/list")
+    count = msg_list.child(className='android.view.ViewGroup').count
+    print(f'读取到了{count}条消息')
+    for i in range(count):
+        msg = msg_list.child(className='android.view.ViewGroup')[i].child(className='android.widget.TextView')
+        # 最左侧的消息坐标，小于100是收到的消息，大于100是发送的消息
+        var = msg.bounds()[0]
+        if var < 100:
+            chatMsg.append({"role": "user", "content": msg.get_text()})
+            last_received_msg = msg.get_text()
+            # print(f'收到一条消息:{msg.get_text()}')
+        else:
+            chatMsg.append({"role": "assistant", "content": msg.get_text()})
+            # print(f'发送一条消息:{msg.get_text()}')
+    print(f'最后一条收到的消息是:{last_received_msg}')
+    response = call_llm(chatMsg)
+    d(className='android.widget.EditText', resourceId="com.whatsapp:id/entry").set_text(response)
+    d(className='android.widget.FrameLayout', resourceId="com.whatsapp:id/send_container").click()
+    chatMsg.append({"role": "assistant", "content": response})
+    # step4: 循环读取消息，并发送回复
     while True:
-        d = u2.connect('ff377427')
-        print(d.info)
-        d.press('home')
-        d.app_stop('com.whatsapp')
-        d.app_start('com.whatsapp', activity='com.whatsapp.HomeActivity')
-        # get the children or grandchildren
-        d(className='android.widget.ImageButton', resourceId="com.whatsapp:id/menuitem_search").click()
-
-        d(className='android.widget.EditText', resourceId="com.whatsapp:id/search_input").clear_text()
-
-        d(className='android.widget.EditText', resourceId="com.whatsapp:id/search_input").set_text('jiyao')
-        d.press('enter')
-        d(className='android.widget.RelativeLayout', resourceId="com.whatsapp:id/contact_row_container").click()
-        sleep(0.3)
+        sleep(1)
         msg_list = d(className='android.widget.ListView', resourceId="android:id/list")
         count = msg_list.child(className='android.view.ViewGroup').count
-        print(f'读取到了{count}条消息')
-        for i in range(count):
-            msg = msg_list.child(className='android.view.ViewGroup')[i].child(className='android.widget.TextView')
-            # 最左侧的消息坐标，小于100是收到的消息，大于100是发送的消息
-            var = msg.bounds()[0]
-            if var < 100:
-                chatMsg.append({"role": "user", "content": msg.get_text()})
-                print(f'收到一条消息:{msg.get_text()}')
+        msg = msg_list.child(className='android.view.ViewGroup')[count - 1].child(className='android.widget.TextView')
+        var = msg.bounds()[0]
+        if var < 100:
+            print(f'最后一条收到的消息是:{msg.get_text()}')
+            if last_received_msg == msg.get_text():
+                print(f'最后一条收到的消息没有变化，:{msg.get_text()}')
             else:
-                chatMsg.append({"role": "assistant", "content": msg.get_text()})
-                print(f'发送一条消息:{msg.get_text()}')
-
-            chat_completion = client.chat.completions.create(
-                model="Llama-3.3-70B-Instruct-ablated",
-                messages=chatMsg,
-                top_p=None,
-                temperature=None,
-                max_tokens=1500,
-                stream=False,
-                seed=None,
-                frequency_penalty=None,
-                presence_penalty=None
-            )
-            response = chat_completion.choices[0].message.content
-            d(className='android.widget.EditText', resourceId="com.whatsapp:id/entry").set_text(response)
-            d(className='android.widget.FrameLayout', resourceId="com.whatsapp:id/send_container").click()
-            sleep(30)
+                print(f'收到一条新消息:{msg.get_text()}')
+                chatMsg.append({"role": "user", "content": msg.get_text()})
+                last_received_msg = msg.get_text()
+                response = call_llm(chatMsg)
+                chatMsg.append({"role": "assistant", "content": response})
+                d(className='android.widget.EditText', resourceId="com.whatsapp:id/entry").set_text(response)
+                d(className='android.widget.FrameLayout', resourceId="com.whatsapp:id/send_container").click()
