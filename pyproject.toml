@@ -15,6 +15,7 @@ lxml = "*"
 adbutils = "^2.5.0"
 retry = ">=0,<1"
 Pillow = "*"
+openai = "^1.60.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1.1"
